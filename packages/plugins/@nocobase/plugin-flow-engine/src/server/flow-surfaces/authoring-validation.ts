@@ -226,11 +226,18 @@ const TABLE_ALLOWED_SETTINGS_KEYS = new Set([...getConfigureOptionKeysForUse('Ta
 const TABLE_INTERNAL_AUTHORING_KEYS = ['tableSettings', 'defaultSorting', 'stepParams'];
 const TABLE_SETTINGS_REPAIR_HINT =
   'Use public table settings keys such as settings.pageSize, settings.sorting, settings.dataScope, settings.density, settings.showRowNumbers, settings.treeTable, settings.dragSort, and settings.dragSortBy. Do not nest persisted tableSettings/defaultSorting/stepParams payloads.';
-const JS_BLOCK_ALLOWED_SETTINGS_KEYS = new Set(['title', 'description', 'className', 'code', 'version']);
+const JS_BLOCK_ALLOWED_SETTINGS_KEYS = new Set([
+  'title',
+  'description',
+  'className',
+  'showBlockCard',
+  'code',
+  'version',
+]);
 const JS_BLOCK_TOP_LEVEL_JS_KEYS = ['code', 'version'] as const;
 const JS_BLOCK_INTERNAL_AUTHORING_KEYS = ['props', 'decoratorProps', 'flowRegistry', 'stepParams'];
 const JS_BLOCK_REPAIR_HINT =
-  'This is a jsBlock payload shape problem. Repair this jsBlock using inline settings.code/settings.version, or applyBlueprint assets.scripts.<key>.code plus block.script. Do not change this block type to table, chart, actionPanel, gridCard, or another block type.';
+  'This is a jsBlock payload shape problem. Repair this jsBlock using inline settings.code/settings.version/settings.showBlockCard, or applyBlueprint assets.scripts.<key>.code plus block.script with optional settings.showBlockCard. Do not change this block type to table, chart, actionPanel, gridCard, or another block type.';
 const CHART_REPAIR_HINT =
   'This is a chart payload shape problem. Keep using chart and repair this chart using assets.charts.<key>.query/visual plus block.chart, or localized settings.query/settings.visual. Do not change this block type to table, jsBlock, actionPanel, gridCard, or another block type, and do not drop or defer the chart. KPI / summary numbers should use jsBlock; charts are for trends, distributions, rankings, and visual analysis.';
 const REPAIR_ALL_ERRORS_AGENT_INSTRUCTION =
@@ -871,6 +878,7 @@ function withJsBlockRepairHint(details: Record<string, any> = {}) {
       inlineBlock: {
         type: 'jsBlock',
         settings: {
+          showBlockCard: true,
           code: 'ctx.render("Replace this with the required rendered UI");',
         },
       },
@@ -885,6 +893,9 @@ function withJsBlockRepairHint(details: Record<string, any> = {}) {
         block: {
           type: 'jsBlock',
           script: 'scriptKey',
+          settings: {
+            showBlockCard: true,
+          },
         },
       },
     },
@@ -4829,7 +4840,7 @@ function collectJsBlockPublicContractErrors(
     pushAuthoringError(errors, {
       path: `${path}.${key}`,
       ruleId: `jsBlock-top-level-${key}-unsupported`,
-      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock blocks; use ${path}.settings.code and ${path}.settings.version for inline JS code`,
+      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock blocks; use ${path}.settings.code, ${path}.settings.version, and ${path}.settings.showBlockCard for public JS block settings`,
       details: withJsBlockRepairHint({ key }),
     });
   });
@@ -4841,7 +4852,7 @@ function collectJsBlockPublicContractErrors(
     pushAuthoringError(errors, {
       path: `${path}.${key}`,
       ruleId: key === 'stepParams' ? 'jsBlock-stepParams-unsupported' : 'jsBlock-internal-field-unsupported',
-      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock blocks; use ${path}.settings.code and ${path}.settings.version instead of internal persisted fields`,
+      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock blocks; use ${path}.settings.code, ${path}.settings.version, and ${path}.settings.showBlockCard instead of internal persisted fields`,
       details: withJsBlockRepairHint({
         key,
       }),
@@ -4866,7 +4877,7 @@ function collectJsBlockPublicContractErrors(
       pushAuthoringError(errors, {
         path: `${path}.settings.${key}`,
         ruleId: 'jsBlock-settings-unsupported-key',
-        message: `flowSurfaces authoring ${path}.settings.${key} is not part of the public jsBlock contract; use ${path}.settings.code and ${path}.settings.version for inline JS code`,
+        message: `flowSurfaces authoring ${path}.settings.${key} is not part of the public jsBlock contract; use ${path}.settings.code, ${path}.settings.version, and ${path}.settings.showBlockCard for public JS block settings`,
         details: withJsBlockRepairHint({
           key,
           allowedKeys: Array.from(JS_BLOCK_ALLOWED_SETTINGS_KEYS),
@@ -4915,7 +4926,7 @@ function collectJsBlockConfigurePublicContractErrors(changes: any, path: string,
     pushAuthoringError(errors, {
       path: `${path}.${key}`,
       ruleId: key === 'stepParams' ? 'jsBlock-stepParams-unsupported' : 'jsBlock-internal-field-unsupported',
-      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock configure changes; use ${path}.code and ${path}.version instead of internal persisted fields`,
+      message: `flowSurfaces authoring ${path}.${key} is not accepted on public jsBlock configure changes; use ${path}.code, ${path}.version, and ${path}.showBlockCard instead of internal persisted fields`,
       details: withJsBlockRepairHint({
         key,
       }),
@@ -4953,7 +4964,7 @@ function collectJsBlockConfigurePublicContractErrors(changes: any, path: string,
     pushAuthoringError(errors, {
       path: `${path}.settings`,
       ruleId: 'jsBlock-settings-unsupported-key',
-      message: `flowSurfaces authoring ${path}.settings is not part of the public jsBlock configure contract; use ${path}.code and ${path}.version`,
+      message: `flowSurfaces authoring ${path}.settings is not part of the public jsBlock configure contract; use ${path}.code, ${path}.version, and ${path}.showBlockCard`,
       details: withJsBlockRepairHint(),
     });
     return;
@@ -7452,13 +7463,14 @@ function buildAuthoringAIEmployeeActionIdentity(settings: any) {
 }
 
 function normalizeAuthoringAIEmployeePublicSettingsForIdentity(settings: Record<string, any>) {
+  const workContext = Object.prototype.hasOwnProperty.call(settings, 'workContext')
+    ? normalizeAuthoringAIEmployeeWorkContextForIdentity(settings.workContext)
+    : [{ type: 'flow-model', target: 'self' }];
   return {
     username: String(settings.username || '').trim(),
     auto: typeof settings.auto === 'boolean' ? settings.auto : false,
-    workContext: Object.prototype.hasOwnProperty.call(settings, 'workContext')
-      ? normalizeAuthoringAIEmployeeWorkContextForIdentity(settings.workContext)
-      : [{ type: 'flow-model', target: 'self' }],
-    tasks: normalizeAuthoringAIEmployeeTasksForIdentity(settings.tasks),
+    workContext,
+    tasks: normalizeAuthoringAIEmployeeTasksForIdentity(settings.tasks, workContext),
     style: {
       ...AUTHORING_AI_EMPLOYEE_DEFAULT_STYLE,
       ...(_.isPlainObject(settings.style) ? _.pick(settings.style, AUTHORING_AI_EMPLOYEE_STYLE_PUBLIC_KEYS) : {}),
@@ -7479,7 +7491,15 @@ function normalizeAuthoringAIEmployeeWorkContextForIdentity(value: any) {
   });
 }
 
-function normalizeAuthoringAIEmployeeTasksForIdentity(value: any) {
+function normalizeAuthoringAIEmployeeTaskWorkContextForIdentity(value: any, defaultWorkContext?: any[]) {
+  const normalized = normalizeAuthoringAIEmployeeWorkContextForIdentity(value);
+  if (Array.isArray(defaultWorkContext) && !normalized.length) {
+    return _.cloneDeep(defaultWorkContext);
+  }
+  return normalized;
+}
+
+function normalizeAuthoringAIEmployeeTasksForIdentity(value: any, defaultWorkContext?: any[]) {
   return _.castArray(value || []).map((task: any) => {
     if (!_.isPlainObject(task)) {
       return task;
@@ -7487,10 +7507,11 @@ function normalizeAuthoringAIEmployeeTasksForIdentity(value: any) {
     const output = _.pick(task, AUTHORING_AI_EMPLOYEE_TASK_PUBLIC_SETTING_KEYS);
     if (_.isPlainObject(output.message)) {
       output.message = _.pick(output.message, AUTHORING_AI_EMPLOYEE_TASK_MESSAGE_PUBLIC_KEYS);
-      if (_.isPlainObject(output.message.workContext)) {
-        output.message.workContext = normalizeAuthoringAIEmployeeWorkContextForIdentity(output.message.workContext);
-      } else if (Array.isArray(output.message.workContext)) {
-        output.message.workContext = normalizeAuthoringAIEmployeeWorkContextForIdentity(output.message.workContext);
+      if (Object.prototype.hasOwnProperty.call(output.message, 'workContext')) {
+        output.message.workContext = normalizeAuthoringAIEmployeeTaskWorkContextForIdentity(
+          output.message.workContext,
+          defaultWorkContext,
+        );
       }
     }
     if (
@@ -7501,6 +7522,16 @@ function normalizeAuthoringAIEmployeeTasksForIdentity(value: any) {
         ...(_.isPlainObject(output.message) ? output.message : {}),
         user: task.prompt,
       };
+    }
+    if (!_.isPlainObject(output.message) && Array.isArray(defaultWorkContext)) {
+      output.message = {
+        workContext: _.cloneDeep(defaultWorkContext),
+      };
+    } else if (
+      _.isPlainObject(output.message) &&
+      !Object.prototype.hasOwnProperty.call(output.message, 'workContext')
+    ) {
+      output.message.workContext = _.cloneDeep(defaultWorkContext || []);
     }
     if (_.isPlainObject(output.model)) {
       output.model = _.pick(output.model, AUTHORING_AI_EMPLOYEE_TASK_MODEL_PUBLIC_KEYS);
